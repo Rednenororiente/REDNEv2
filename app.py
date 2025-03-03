@@ -96,7 +96,7 @@ def generate_helicorder_route():
     except Exception as e:
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
 
-# Función para generar un sismograma
+# Función para generar un sismograma con múltiples canales
 def generate_sismograma(net, sta, loc, cha, start, end):
     try:
         # Mapeo de estaciones a canales
@@ -109,10 +109,11 @@ def generate_sismograma(net, sta, loc, cha, start, end):
             'UIS11': ['EHE.D', 'EHN.D', 'EHZ.D'],
         }
 
-        # Obtener los canales asociados a la estación
+        # Verificar si la estación está en el mapeo de estaciones
         if sta not in station_channels:
             return jsonify({"error": "Estación no reconocida"}), 400
 
+        # Obtener los canales asociados a la estación seleccionada
         associated_channels = station_channels[sta]  # Lista de canales asociados
 
         # Crear los subgráficos para los diferentes canales
