@@ -223,10 +223,10 @@ def generate_helicorder(net, sta, loc, cha, start, end):
         fig.set_size_inches(12, 4)  # Configura el tamaño del gráfico (ancho x alto)
 
         # Informción en el Helicorder
-        ax = fig.gca()  # Obtener el eje actual (para agregar el texto)
-        ax.text(0.02, 1.05, "Universidad Industrial de Santander UIS", transform=ax.transAxes, fontsize=10, verticalalignment='bottom', ha='left', color='black')
-        ax.text(0.02, 1.1, "Red Sísmica REDNE", transform=ax.transAxes, fontsize=10, verticalalignment='bottom', ha='left', color='black')
-        ax.text(0.02, 1.15, f"Estructura de la fecha de: {start} - {end}", transform=ax.transAxes, fontsize=10, verticalalignment='bottom', ha='left', color='black')
+        #ax = fig.gca()  # Obtener el eje actual (para agregar el texto)
+        #ax.text(0.02, 1.05, "Universidad Industrial de Santander UIS", transform=ax.transAxes, fontsize=10, verticalalignment='bottom', ha='left', color='black')
+        #ax.text(0.02, 1.1, "Red Sísmica REDNE", transform=ax.transAxes, fontsize=10, verticalalignment='bottom', ha='left', color='black')
+        #ax.text(0.02, 1.15, f"Estructura de la fecha de: {start} - {end}", transform=ax.transAxes, fontsize=10, verticalalignment='bottom', ha='left', color='black')
 
         # Guardar el gráfico en memoria
         output_image = io.BytesIO()
