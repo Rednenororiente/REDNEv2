@@ -15,21 +15,10 @@ import datetime
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')  # Para evitar problemas de GUI en entornos sin pantalla
-from flask_cors import CORS
+from flask_cors import CORS #problemas de idx (Agredado)
 
-# Configuración de la aplicación
 app = Flask(__name__)
-CORS(app)  # Habilita CORS para todas las rutas
-
-# Mapeo de estaciones a canales
-station_channels = {
-    'UIS01': ['HNE.D', 'HNN.D', 'HNZ.D'],
-    'UIS05': ['EHZ.D', 'ENE.D', 'ENN.D', 'ENZ.D'],
-    'UIS06': ['EHE.D', 'EHN.D', 'EHZ.D'],
-    'UIS09': ['EHE.D', 'EHN.D', 'EHZ.D'],
-    'UIS10': ['EHE.D', 'EHN.D', 'EHZ.D'],
-    'UIS11': ['EHE.D', 'EHN.D', 'EHZ.D'],
-}
+CORS(app)  # Habilita CORS para todas las rutas(Agregado)
 
 # Función auxiliar para calcular la diferencia de tiempo
 def calculate_time_difference(start, end):
@@ -47,7 +36,7 @@ def generate_graph():
         net = request.args.get('net')
         sta = request.args.get('sta')
         loc = request.args.get('loc')
-        cha = request.args.get('cha')  # Canal elegido por el usuario
+        cha = request.args.get('cha')
 
         # Verificar que todos los parámetros estén presentes
         if not all([start, end, net, sta, loc, cha]):
@@ -55,25 +44,76 @@ def generate_graph():
 
         # Calcular la diferencia de tiempo para decidir el tipo de gráfico
         interval_minutes = calculate_time_difference(start, end)
-        
-        # Si la diferencia de tiempo es menor a 30 minutos, generar sismograma
         if interval_minutes <= 30:
-            return generate_sismograma(net, sta, loc, start, end)
+            return generate_sismograma(net, sta, loc, cha, start, end)
         else:
-            # Si el intervalo es mayor a 30 minutos, generar helicorder
-            return generate_helicorder(net, sta, loc, start, end)
+            return generate_helicorder(net, sta, loc, cha, start, end)
 
     except Exception as e:
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
 
-# Función para generar un sismograma con múltiples canales
-def generate_sismograma(net, sta, loc, start, end):
+# Ruta para generar específicamente sismogramas
+@app.route('/generate_sismograma', methods=['GET'])
+def generate_sismograma_route():
     try:
+        # Extraer parámetros de la solicitud
+        start = request.args.get('start')
+        end = request.args.get('end')
+        net = request.args.get('net')
+        sta = request.args.get('sta')
+        loc = request.args.get('loc')
+        cha = request.args.get('cha')
+
+        # Validar los parámetros
+        if not all([start, end, net, sta, loc, cha]):
+            return jsonify({"error": "Faltan parámetros requeridos"}), 400
+
+        # Llamar a la función de generación de sismogramas
+        return generate_sismograma(net, sta, loc, cha, start, end)
+
+    except Exception as e:
+        return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
+
+# Ruta para generar específicamente helicorders
+@app.route('/generate_helicorder', methods=['GET'])
+def generate_helicorder_route():
+    try:
+        # Extraer parámetros de la solicitud
+        start = request.args.get('start')
+        end = request.args.get('end')
+        net = request.args.get('net')
+        sta = request.args.get('sta')
+        loc = request.args.get('loc')
+        cha = request.args.get('cha')
+
+        # Validar los parámetros
+        if not all([start, end, net, sta, loc, cha]):
+            return jsonify({"error": "Faltan parámetros requeridos"}), 400
+
+        # Llamar a la función de generación de helicorders
+        return generate_helicorder(net, sta, loc, cha, start, end)
+
+    except Exception as e:
+        return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
+
+# Función para generar un sismograma
+def generate_sismograma(net, sta, loc, cha, start, end):
+    try:
+        # Mapeo de estaciones a canales
+        station_channels = {
+            'UIS01': ['HNE.D', 'HNN.D', 'HNZ.D'],
+            'UIS05': ['EHZ.D', 'ENE.D', 'ENN.D', 'ENZ.D'],
+            'UIS06': ['EHE.D', 'EHN.D', 'EHZ.D'],
+            'UIS09': ['EHE.D', 'EHN.D', 'EHZ.D'],
+            'UIS10': ['EHE.D', 'EHN.D', 'EHZ.D'],
+            'UIS11': ['EHE.D', 'EHN.D', 'EHZ.D'],
+        }
+
         # Obtener los canales asociados a la estación
         if sta not in station_channels:
             return jsonify({"error": "Estación no reconocida"}), 400
 
-        associated_channels = station_channels[sta]
+        associated_channels = station_channels[sta]  # Lista de canales asociados
 
         # Crear los subgráficos para los diferentes canales
         fig, axes = plt.subplots(len(associated_channels), 1, figsize=(12, 12), sharex=False)
@@ -82,6 +122,7 @@ def generate_sismograma(net, sta, loc, start, end):
         urls = {}
         streams = {}
 
+        # Iterar sobre cada canal asociado
         for i, channel in enumerate(associated_channels):
             # Construir la URL para descargar los datos
             url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel={channel}&nodata=404"
@@ -149,7 +190,7 @@ def generate_sismograma(net, sta, loc, start, end):
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
 
 # Función para generar un helicorder
-def generate_helicorder(net, sta, loc, start, end):
+def generate_helicorder(net, sta, loc, cha, start, end):
     try:
         # Construir la URL para descargar datos
         url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel={cha}&nodata=404"
@@ -196,7 +237,7 @@ def generate_helicorder(net, sta, loc, start, end):
         return send_file(output_image, mimetype='image/png')
 
     except Exception as e:
-        return jsonify({"error": f"Error generando el helicorder: {str(e)}"}), 500
+        return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
 
 # Punto de entrada del servidor Flask
 if __name__ == '__main__':
