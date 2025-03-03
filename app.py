@@ -15,10 +15,10 @@ import datetime
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')  # Para evitar problemas de GUI en entornos sin pantalla
-from flask_cors import CORS  # problemas de idx (Agregado)
+from flask_cors import CORS  # problemas de idx (Agregados)
 
 app = Flask(__name__)
-CORS(app)  # Habilita CORS para todas las rutas(Agregado)
+CORS(app)  # Habilita CORS para todas las rutas(Agregados)
 
 # Mapeo de estaciones a canales
 station_channels = {
@@ -66,8 +66,11 @@ def generate_graph():
         # Calcular la diferencia de tiempo para decidir el tipo de gráfico
         interval_minutes = calculate_time_difference(start, end)
 
-        # Llamar a la función de generación de sismogramas con los canales asociados
-        return generate_sismograma(net, sta, loc, associated_channels, start, end)
+        # Llamar a la función de generación de sismogramas o helicorders según el intervalo
+        if interval_minutes <= 30:
+            return generate_sismograma(net, sta, loc, associated_channels, start, end)
+        else:
+            return generate_helicorder(net, sta, loc, associated_channels, start, end)
 
     except Exception as e:
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
@@ -109,7 +112,7 @@ def generate_sismograma(net, sta, loc, channels, start, end):
             ax = axes[i]
             ax.plot(times, data, color=['blue', 'green', 'red'][i], linewidth=0.8)  # Colores según el canal
             ax.set_title(f"Sismograma {channel} ({net}.{sta}.{loc})", fontsize=12)
-            ax.set_ylabel("Amplitud", fontsize=10)
+            ax.set_ylabel("Amplitud (M/s)", fontsize=10)
             ax.legend([f"Canal {channel}"], loc="upper right")
             ax.grid(True, linestyle="--", alpha=0.7)
 
@@ -118,6 +121,13 @@ def generate_sismograma(net, sta, loc, channels, start, end):
 
             # Mostrar el URL asociado debajo de cada gráfico
             ax.text(0.5, -0.2, f"URL ({channel}): {urls[channel]}", transform=ax.transAxes, fontsize=8, color=['blue', 'green', 'red'][i], ha="center")
+
+            # Información adicional en la esquina superior izquierda
+            station_info = f"{net}.{sta}.{loc}.{channel}"
+            ax.text(0.02, 0.98, station_info, transform=ax.transAxes, fontsize=10, verticalalignment='top', bbox=dict(facecolor='white', edgecolor='black'))
+
+            # Rotar las etiquetas del eje X para mayor claridad
+            fig.autofmt_xdate()
 
             # Ajustar etiquetas para el último gráfico
             if i == len(channels) - 1:
@@ -141,41 +151,74 @@ def generate_sismograma(net, sta, loc, channels, start, end):
     except Exception as e:
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
 
-# Función para generar un helicorder (similar a la de sismogramas, pero con otro tipo de gráfico)
-def generate_helicorder(net, sta, loc, cha, start, end):
+# Función para generar un helicorder con múltiples canales
+def generate_helicorder(net, sta, loc, channels, start, end):
     try:
-        # Construir la URL para descargar datos
-        url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel={cha}&nodata=404"
+        # Crear los subgráficos para los diferentes canales
+        fig, axes = plt.subplots(len(channels), 1, figsize=(12, 12), sharex=False)
+        plt.subplots_adjust(hspace=0.5)
 
-        # Realizar la solicitud al servidor remoto
-        response = requests.get(url)
-        if response.status_code != 200:
-            return jsonify({"error": f"Error al descargar datos: {response.status_code}"}), 500
+        urls = {}
+        streams = {}
 
-        # Procesar los datos MiniSEED
-        mini_seed_data = io.BytesIO(response.content)
-        try:
-            st = read(mini_seed_data)
-        except Exception as e:
-            return jsonify({"error": f"Error procesando MiniSEED: {str(e)}"}), 500
+        for i, channel in enumerate(channels):
+            # Construir la URL para descargar los datos
+            url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel={channel}&nodata=404"
+            urls[channel] = url
 
-        # Crear helicorder utilizando ObsPy
-        fig = st.plot(
-            type="dayplot",
-            interval=15,
-            right_vertical_labels=True,
-            vertical_scaling_range=2000,
-            color=['k', 'r', 'b'],
-            show_y_UTC_label=True,
-            one_tick_per_line=True
-        )
+            # Realizar la solicitud al servidor remoto
+            response = requests.get(url)
+            if response.status_code != 200:
+                return jsonify({"error": f"Error al descargar datos: {response.status_code}"}), 500
 
-        # Ajustar el tamaño del helicorder (matplotlib se encarga del tamaño)
-        fig.set_size_inches(12, 4)  # Configura el tamaño del gráfico (ancho x alto)
+            # Procesar los datos MiniSEED
+            mini_seed_data = io.BytesIO(response.content)
+            try:
+                st = read(mini_seed_data)
+            except Exception as e:
+                return jsonify({"error": f"Error procesando MiniSEED: {str(e)}"}), 500
 
-        # Guardar el gráfico en memoria
+            # Extraer la traza de los datos
+            tr = st[0]
+            start_time = tr.stats.starttime.datetime
+            times = [start_time + datetime.timedelta(seconds=sec) for sec in tr.times()]
+            data = tr.data
+
+            # Graficar el helicorder
+            ax = axes[i]
+            ax.plot(times, data, color=['blue', 'green', 'red'][i], linewidth=0.8)  # Colores según el canal
+            ax.set_title(f"Helicorder {channel} ({net}.{sta}.{loc})", fontsize=12)
+            ax.set_ylabel("Amplitud (M/s)", fontsize=10)
+            ax.legend([f"Canal {channel}"], loc="upper right")
+            ax.grid(True, linestyle="--", alpha=0.7)
+
+            # Formatear el eje X para mostrar tiempos en UTC en cada gráfico
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S UTC'))
+
+            # Mostrar el URL asociado debajo de cada gráfico
+            ax.text(0.5, -0.2, f"URL ({channel}): {urls[channel]}", transform=ax.transAxes, fontsize=8, color=['blue', 'green', 'red'][i], ha="center")
+
+            # Información adicional en la esquina superior izquierda
+            station_info = f"{net}.{sta}.{loc}.{channel}"
+            ax.text(0.02, 0.98, station_info, transform=ax.transAxes, fontsize=10, verticalalignment='top', bbox=dict(facecolor='white', edgecolor='black'))
+
+            # Rotar las etiquetas del eje X para mayor claridad
+            fig.autofmt_xdate()
+
+            # Ajustar etiquetas para el último gráfico
+            if i == len(channels) - 1:
+                ax.set_xlabel("Tiempo (HH:MM:SS UTC)", fontsize=10)
+
+        # Mostrar la fecha debajo de todos los helicorders
+        date_str = start.strftime('%b-%d-%Y')  # Formato: nov-11-2024
+        plt.figtext(0.5, -0.03, f"Fecha: {date_str}", wrap=True, horizontalalignment='center', fontsize=12)
+        plt.subplots_adjust(hspace=0.5)
+
+        plt.tight_layout()
+
+        # Guardar la imagen generada
         output_image = io.BytesIO()
-        fig.savefig(output_image, format='png', dpi=120, bbox_inches="tight")
+        plt.savefig(output_image, format='png', dpi=100, bbox_inches="tight")
         output_image.seek(0)
         plt.close(fig)
 
