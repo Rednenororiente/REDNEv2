@@ -174,7 +174,7 @@ def generate_helicorder(net, sta, loc, start, end):
             vertical_scaling_range=2000,
             color=['k', 'r', 'b'],
             show_y_UTC_label=True,
-            one_tick_per_line=True
+            one_tick_per_line=True,
             size=(12, 6)  # Ajustar el tamaño del gráfico
         )
 
