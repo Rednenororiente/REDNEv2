@@ -77,11 +77,11 @@ def generate_graph():
     except Exception as e:
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
 
-# Función para generar el sismograma para cada canal
+# Función para generar un sismograma para múltiples canales asociados a una estación
 def generate_sismograma(net, sta, loc, cha, start, end):
     try:
         print(f"Generando sismograma para: {sta}, Canal: {cha}, {start} - {end}")
-        
+
         # Paso 7: Construir la URL para obtener los datos sísmicos
         url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel={cha}&nodata=404"
         print(f"URL de solicitud: {url}")
@@ -96,13 +96,15 @@ def generate_sismograma(net, sta, loc, cha, start, end):
         except requests.exceptions.RequestException as e:
             raise Exception(f"Error en la solicitud para el canal {cha}: {str(e)}")
 
-        print(f"Datos descargados correctamente para el canal {cha}")
+        print(f"Datos descargados correctamente para el canal {cha}, tamaño de los datos: {len(response.content)} bytes")
 
         # Paso 9: Procesar los datos MiniSEED
         mini_seed_data = io.BytesIO(response.content)
         try:
             st = read(mini_seed_data)
+            print(f"Datos MiniSEED procesados correctamente para el canal {cha}")
         except Exception as e:
+            print(f"Error procesando MiniSEED para el canal {cha}: {str(e)}")
             raise Exception(f"Error procesando MiniSEED para el canal {cha}: {str(e)}")
 
         # Paso 10: Crear el gráfico del sismograma
@@ -110,6 +112,8 @@ def generate_sismograma(net, sta, loc, cha, start, end):
         start_time = tr.stats.starttime.datetime
         times = [start_time + datetime.timedelta(seconds=sec) for sec in tr.times()]
         data = tr.data
+
+        print(f"Generando gráfico para el canal {cha}")
 
         fig, ax = plt.subplots(figsize=(10, 6))
         ax.plot(times, data, linewidth=0.8)
@@ -127,12 +131,14 @@ def generate_sismograma(net, sta, loc, cha, start, end):
         output_image.seek(0)
         plt.close(fig)
 
+        print(f"Sismograma generado para el canal {cha}")
         return output_image
 
     except Exception as e:
         # Registrar el error detalladamente para depuración
         print(f"Error al generar el sismograma: {str(e)}")
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
+
 
 # Punto de entrada del servidor Flask
 if __name__ == '__main__':
