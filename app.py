@@ -77,66 +77,70 @@ def generate_graph():
     except Exception as e:
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
 
-# Función para generar un sismograma para múltiples canales asociados a una estación
-def generate_sismograma(net, sta, loc, cha, start, end):
+# Función para generar un gráfico con los sismogramas de todos los canales asociados a una estación
+def generate_sismograma_conjuntamente(net, sta, loc, start, end):
     try:
-        print(f"Generando sismograma para: {sta}, Canal: {cha}, {start} - {end}")
+        print(f"Generando sismograma combinado para: {sta}, {start} - {end}")
 
-        # Paso 7: Construir la URL para obtener los datos sísmicos
-        url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel={cha}&nodata=404"
-        print(f"URL de solicitud: {url}")
-        
-        # Paso 8: Realizar la solicitud HTTP para obtener los datos
-        try:
-            response = requests.get(url, timeout=30)  # Timeout de 30 segundos para evitar bloqueos
+        # Paso 7: Obtener los canales asociados a la estación
+        selected_channels = station_channels.get(sta, [])
+        if not selected_channels:
+            return jsonify({"error": "No se encontraron canales para la estación seleccionada"}), 400
+
+        # Crear una figura para el gráfico conjunto
+        fig, axs = plt.subplots(len(selected_channels), 1, figsize=(10, 6 * len(selected_channels)))
+
+        # Si solo hay un canal, axs será un único eje, así que aseguramos que sea iterable
+        if len(selected_channels) == 1:
+            axs = [axs]
+
+        # Paso 8: Iterar sobre los canales y generar el gráfico para cada uno
+        for i, cha in enumerate(selected_channels):
+            url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel={cha}&nodata=404"
+            print(f"URL de solicitud para el canal {cha}: {url}")
+
+            # Realizar la solicitud HTTP para obtener los datos
+            response = requests.get(url, timeout=30)
             if response.status_code != 200:
                 raise Exception(f"Error al descargar datos del canal {cha}: {response.status_code}")
-        except requests.exceptions.Timeout:
-            raise Exception(f"Tiempo de espera agotado al intentar descargar los datos del canal {cha}")
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"Error en la solicitud para el canal {cha}: {str(e)}")
 
-        print(f"Datos descargados correctamente para el canal {cha}, tamaño de los datos: {len(response.content)} bytes")
+            print(f"Datos descargados correctamente para el canal {cha}, tamaño de los datos: {len(response.content)} bytes")
 
-        # Paso 9: Procesar los datos MiniSEED
-        mini_seed_data = io.BytesIO(response.content)
-        try:
+            # Paso 9: Procesar los datos MiniSEED
+            mini_seed_data = io.BytesIO(response.content)
             st = read(mini_seed_data)
             print(f"Datos MiniSEED procesados correctamente para el canal {cha}")
-        except Exception as e:
-            print(f"Error procesando MiniSEED para el canal {cha}: {str(e)}")
-            raise Exception(f"Error procesando MiniSEED para el canal {cha}: {str(e)}")
 
-        # Paso 10: Crear el gráfico del sismograma
-        tr = st[0]
-        start_time = tr.stats.starttime.datetime
-        times = [start_time + datetime.timedelta(seconds=sec) for sec in tr.times()]
-        data = tr.data
+            # Paso 10: Crear el gráfico del sismograma para cada canal
+            tr = st[0]
+            start_time = tr.stats.starttime.datetime
+            times = [start_time + datetime.timedelta(seconds=sec) for sec in tr.times()]
+            data = tr.data
 
-        print(f"Generando gráfico para el canal {cha}")
+            # Generar gráfico en el eje correspondiente de la figura
+            axs[i].plot(times, data, linewidth=0.8)
+            axs[i].set_title(f"Sismograma {cha} ({sta})\nRed Sísmica REDNE\n{start} - {end}")
+            axs[i].set_xlabel("Tiempo (UTC Colombia)")
+            axs[i].set_ylabel("Amplitud (M/s)")
+            axs[i].grid(True)
+            axs[i].tick_params(axis='x', rotation=45)
 
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.plot(times, data, linewidth=0.8)
-        ax.set_title(f"Sismograma {cha} ({sta})\nRed Sísmica REDNE\n{start} - {end}")
-        ax.set_xlabel("Tiempo (UTC Colombia)")
-        ax.set_ylabel("Amplitud (M/s)")
-        fig.autofmt_xdate()
+        # Paso 11: Ajustar el espacio entre los subgráficos
+        fig.tight_layout(pad=2.0)
 
-        # Paso 11: Agregar URL del canal en el gráfico
-        ax.text(0.02, 0.02, f"URL ({cha}): {url}", transform=ax.transAxes, fontsize=8, verticalalignment='bottom', bbox=dict(facecolor='white', edgecolor='black'))
-
-        # Paso 12: Guardar el gráfico en memoria
+        # Paso 12: Guardar el gráfico combinado en memoria
         output_image = io.BytesIO()
         plt.savefig(output_image, format='png', dpi=100, bbox_inches="tight")
         output_image.seek(0)
         plt.close(fig)
 
-        print(f"Sismograma generado para el canal {cha}")
-        return output_image
+        print(f"Sismograma combinado generado para la estación {sta}")
+
+        # Devolver la imagen generada
+        return send_file(output_image, mimetype='image/png')
 
     except Exception as e:
-        # Registrar el error detalladamente para depuración
-        print(f"Error al generar el sismograma: {str(e)}")
+        print(f"Error al generar el sismograma combinado: {str(e)}")
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
 
 
