@@ -34,6 +34,18 @@ station_channels = {
     # Agregar otras estaciones y sus canales aquí
 }
 
+# Ruta para redirigir a /generate_graph desde /generate_sismograma
+@app.route('/generate_sismograma', methods=['GET'])
+def generate_sismograma_route():
+    # Redirige la solicitud a /generate_graph
+    return generate_graph()
+
+# Ruta para redirigir a /generate_graph desde /generate_helicorder
+@app.route('/generate_helicorder', methods=['GET'])
+def generate_helicorder_route():
+    # Redirige la solicitud a /generate_graph
+    return generate_graph()
+
 # Ruta principal para manejar gráficos dinámicamente
 @app.route('/generate_graph', methods=['GET'])
 def generate_graph():
@@ -78,47 +90,61 @@ def generate_graph():
     except Exception as e:
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
 
-# Función para generar un sismograma
+# Función para generar un sismograma para múltiples canales asociados a una estación
 def generate_sismograma(net, sta, loc, cha, start, end):
     try:
-        # Construir la URL para descargar datos
-        url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel={cha}&nodata=404"
-        
-        # Realizar la solicitud al servidor remoto
-        response = requests.get(url)
-        if response.status_code != 200:
-            return jsonify({"error": f"Error al descargar datos: {response.status_code}"}), 500
+        sismogram_images = []  # Lista para almacenar las imágenes de los sismogramas generados
 
-        # Procesar los datos MiniSEED
-        mini_seed_data = io.BytesIO(response.content)
-        try:
-            st = read(mini_seed_data)
-        except Exception as e:
-            return jsonify({"error": f"Error procesando MiniSEED: {str(e)}"}), 500
+        # Identificar los canales asociados a la estación seleccionada
+        selected_channels = station_channels.get(sta, [])
 
-        # Crear gráfico del sismograma
-        tr = st[0]
-        start_time = tr.stats.starttime.datetime
-        times = [start_time + datetime.timedelta(seconds=sec) for sec in tr.times()]
-        data = tr.data
+        # Si el canal seleccionado es válido, obtener los canales restantes
+        if cha and cha in selected_channels:
+            selected_channels.remove(cha)
 
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.plot(times, data, linewidth=0.8)
-        ax.set_title(f"Sismograma {cha} ({sta})\nRed Sísmica REDNE\n{start} - {end}")
-        ax.set_xlabel("Tiempo (UTC Colombia)")
-        ax.set_ylabel("Amplitud (M/s)")
-        fig.autofmt_xdate()
+        # Generar los sismogramas para cada canal
+        for cha in selected_channels:
+            # Construir la URL para descargar datos del canal
+            url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel={cha}&nodata=404"
+            
+            # Realizar la solicitud al servidor remoto
+            response = requests.get(url)
+            if response.status_code != 200:
+                return jsonify({"error": f"Error al descargar datos: {response.status_code}"}), 500
 
-        # Agregar URL del canal en la esquina inferior izquierda
-        ax.text(0.02, 0.02, f"URL ({cha}): {url}", transform=ax.transAxes, fontsize=8, verticalalignment='bottom', bbox=dict(facecolor='white', edgecolor='black'))
+            # Procesar los datos MiniSEED
+            mini_seed_data = io.BytesIO(response.content)
+            try:
+                st = read(mini_seed_data)
+            except Exception as e:
+                return jsonify({"error": f"Error procesando MiniSEED: {str(e)}"}), 500
 
-        # Guardar el gráfico en memoria
-        output_image = io.BytesIO()
-        plt.savefig(output_image, format='png', dpi=100, bbox_inches="tight")
-        output_image.seek(0)
-        plt.close(fig)
+            # Crear gráfico del sismograma
+            tr = st[0]
+            start_time = tr.stats.starttime.datetime
+            times = [start_time + datetime.timedelta(seconds=sec) for sec in tr.times()]
+            data = tr.data
 
-        return output_image  # Retorna la imagen generada
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.plot(times, data, linewidth=0.8)
+            ax.set_title(f"Sismograma {cha} ({sta})\nRed Sísmica REDNE\n{start} - {end}")
+            ax.set_xlabel("Tiempo (UTC Colombia)")
+            ax.set_ylabel("Amplitud (M/s)")
+            fig.autofmt_xdate()
+
+            # Agregar URL del canal en la esquina inferior izquierda
+            ax.text(0.02, 0.02, f"URL ({cha}): {url}", transform=ax.transAxes, fontsize=8, verticalalignment='bottom', bbox=dict(facecolor='white', edgecolor='black'))
+
+            # Guardar el gráfico en memoria
+            output_image = io.BytesIO()
+            plt.savefig(output_image, format='png', dpi=100, bbox_inches="tight")
+            output_image.seek(0)
+            plt.close(fig)
+
+            sismogram_images.append(output_image)
+
+        # Devolver las imágenes generadas
+        return sismogram_images
 
     except Exception as e:
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
@@ -164,10 +190,11 @@ def generate_helicorder(net, sta, loc, cha, start, end):
         return output_image  # Retorna la imagen generada
 
     except Exception as e:
-        return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
+        return jsonify({"error": f"Error procesando helicorder: {str(e)}"}), 500
 
 # Punto de entrada del servidor Flask
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
 
 
