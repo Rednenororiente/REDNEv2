@@ -18,18 +18,22 @@ matplotlib.use('Agg')  # Para evitar problemas de GUI en entornos sin pantalla
 from flask_cors import CORS  # Habilitar CORS para todas las rutas
 
 app = Flask(__name__)
-CORS(app)  # Habilita CORS para todas las rutas
+CORS(app)  # Habilitar CORS para todas las rutas
 
-# Diccionario de canales asociados a cada estación
+# Directorio de Estaciones de REDNE y sus canales
 station_channels = {
-    'UIS01': ['HNE', 'HNN', 'HNZ'], 
+    'UIS01': ['HNE', 'HNN', 'HNZ'],
+    'UIS03': ['HNE', 'HNN', 'HNZ'],
+    'UIS04': ['HNE', 'HNN', 'HNZ'], 
     'UIS05': ['EHZ', 'ENE', 'ENN', 'ENZ'], 
-    'UIS06': ['EHE', 'EHN', 'EHZ'], 
-    # Agregar otras estaciones y sus canales aquí
+    'UIS06': ['EHE', 'EHN', 'EHZ'],
+    'UIS09': ['EHE', 'EHN', 'EHZ'], 
+    'UIS10': ['EHE', 'EHN', 'EHZ'],
+    'UIS11': ['EHE', 'EHN', 'EHZ'], 
 }
 
-# Función para generar un gráfico con los sismogramas de todos los canales asociados a una estación
-def generate_sismograma_conjuntamente(net, sta, loc, start, end):
+# Función auxiliar para generar el sismograma combinado
+def generate_sismograma_engrupo(net, sta, loc, start, end):
     try:
         print(f"Generando sismograma combinado para: {sta}, {start} - {end}")
         # Obtener los canales asociados a la estación
@@ -49,7 +53,7 @@ def generate_sismograma_conjuntamente(net, sta, loc, start, end):
             print(f"URL de solicitud para el canal {cha}: {url}")
             
             # Realizar la solicitud HTTP para obtener los datos
-            response = requests.get(url, timeout=30)
+            response = requests.get(url, timeout=10)
             if response.status_code != 200:
                 raise Exception(f"Error al descargar datos del canal {cha}: {response.status_code}")
             print(f"Datos descargados correctamente para el canal {cha}, tamaño de los datos: {len(response.content)} bytes")
@@ -67,7 +71,7 @@ def generate_sismograma_conjuntamente(net, sta, loc, start, end):
             
             # Generar gráfico en el eje correspondiente de la figura
             axs[i].plot(times, data, linewidth=0.8)
-            axs[i].set_title(f"Sismograma {cha} ({sta}) \nRed Sísmica REDNE\n{start} - {end}")
+            axs[i].set_title(f"Universidad Industrial de Santander UIS \n Red Sísmica REDNE \n Sismograma {cha} ({sta}) \n {start} - {end}")
             axs[i].set_xlabel("Tiempo (UTC Colombia)")
             axs[i].set_ylabel("Amplitud (M/s)")
             axs[i].grid(True)
@@ -91,9 +95,9 @@ def generate_sismograma_conjuntamente(net, sta, loc, start, end):
         print(f"Error al generar el sismograma combinado: {str(e)}")
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
 
-# Ruta para generar sismogramas combinados
+# Ruta de Flask para manejar solicitudes de sismogramas
 @app.route('/generate_sismograma', methods=['GET'])
-def generate_sismograma_route():
+def generate_sismograma():
     try:
         # Obtener parámetros de la solicitud
         start = request.args.get('start')
@@ -112,7 +116,7 @@ def generate_sismograma_route():
             return jsonify({"error": "Estación no válida"}), 400
         
         # Generar el sismograma combinado
-        return generate_sismograma_conjuntamente(net, sta, loc, start, end)
+        return generate_sismograma_engrupo(net, sta, loc, start, end)
     
     except Exception as e:
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
