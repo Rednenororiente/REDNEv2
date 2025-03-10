@@ -7,7 +7,7 @@ Original file is located at
     https://colab.research.google.com/drive/1rfIty2xr04StxKdItR0hVVAWnVhsUf7g
 """
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, send_file, jsonify
 from obspy import read
 import requests
 import io
@@ -28,16 +28,22 @@ station_channels = {
     # Agregar otras estaciones y sus canales aquí
 }
 
-# Ruta para redirigir a /generate_graph desde /generate_sismograma
+# Función auxiliar para calcular la diferencia de tiempo
+def calculate_time_difference(start, end):
+    start_time = datetime.datetime.fromisoformat(start)
+    end_time = datetime.datetime.fromisoformat(end)
+    return (end_time - start_time).total_seconds() / 60  # Diferencia en minutos
+
+# Ruta principal para manejar gráficos dinámicamente
 @app.route('/generate_sismograma', methods=['GET'])
 def generate_sismograma_route():
     return generate_graph()
 
-# Ruta principal para manejar gráficos dinámicamente
+# Ruta para generar el sismograma (con todos los canales)
 @app.route('/generate_graph', methods=['GET'])
 def generate_graph():
     try:
-        # Obtener parámetros de la solicitud
+        # Paso 1: Obtener parámetros de la solicitud
         start = request.args.get('start')
         end = request.args.get('end')
         net = request.args.get('net')
@@ -45,22 +51,22 @@ def generate_graph():
         loc = request.args.get('loc')
         cha = request.args.get('cha')
 
-        # Verificar que todos los parámetros estén presentes
+        # Paso 2: Verificar que todos los parámetros estén presentes
         if not all([start, end, net, sta, loc, cha]):
             return jsonify({"error": "Faltan parámetros requeridos"}), 400
 
-        # Verificar si la estación es válida
+        # Paso 3: Verificar si la estación existe en el diccionario de canales
         if sta not in station_channels:
             return jsonify({"error": "Estación no válida"}), 400
 
-        # Identificar los canales asociados a la estación
+        # Paso 4: Obtener los canales asociados a la estación
         selected_channels = station_channels[sta]
 
-        # Si el canal elegido no es válido, devolver error
+        # Paso 5: Verificar si el canal seleccionado es válido
         if cha not in selected_channels:
             return jsonify({"error": "Canal seleccionado no válido para esta estación"}), 400
 
-        # Generar los sismogramas para los canales asociados
+        # Paso 6: Generar los sismogramas para todos los canales asociados a la estación
         sismograms = []
         for channel in selected_channels:
             sismogram_image = generate_sismograma(net, sta, loc, channel, start, end)
@@ -71,66 +77,57 @@ def generate_graph():
     except Exception as e:
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
 
-# Función para generar un sismograma para múltiples canales asociados a una estación
+# Función para generar el sismograma para cada canal
 def generate_sismograma(net, sta, loc, cha, start, end):
     try:
-        sismogram_images = []  # Lista para almacenar las imágenes de los sismogramas generados
+        print(f"Generando sismograma para: {sta}, Canal: {cha}, {start} - {end}")
+        
+        # Paso 7: Construir la URL para obtener los datos sísmicos
+        url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel={cha}&nodata=404"
+        print(f"URL de solicitud: {url}")
+        
+        # Paso 8: Realizar la solicitud HTTP para obtener los datos
+        try:
+            response = requests.get(url, timeout=30)  # Timeout de 30 segundos para evitar bloqueos
+            if response.status_code != 200:
+                raise Exception(f"Error al descargar datos del canal {cha}: {response.status_code}")
+        except requests.exceptions.Timeout:
+            raise Exception(f"Tiempo de espera agotado al intentar descargar los datos del canal {cha}")
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Error en la solicitud para el canal {cha}: {str(e)}")
 
-        # Identificar los canales asociados a la estación seleccionada
-        selected_channels = station_channels.get(sta, [])
+        print(f"Datos descargados correctamente para el canal {cha}")
 
-        # Si el canal seleccionado es válido, obtener los canales restantes
-        if cha and cha in selected_channels:
-            selected_channels.remove(cha)
+        # Paso 9: Procesar los datos MiniSEED
+        mini_seed_data = io.BytesIO(response.content)
+        try:
+            st = read(mini_seed_data)
+        except Exception as e:
+            raise Exception(f"Error procesando MiniSEED para el canal {cha}: {str(e)}")
 
-        # Generar los sismogramas para cada canal
-        for cha in selected_channels:
-            # Construir la URL para descargar datos del canal
-            url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel={cha}&nodata=404"
-            
-            # Realizar la solicitud al servidor remoto
-            try:
-                response = requests.get(url, timeout=30)  # Timeout de 30 segundos para evitar bloqueos
-                if response.status_code != 200:
-                    raise Exception(f"Error al descargar datos del canal {cha}: {response.status_code}")
-            except requests.exceptions.Timeout:
-                raise Exception(f"Tiempo de espera agotado al intentar descargar los datos del canal {cha}")
-            except requests.exceptions.RequestException as e:
-                raise Exception(f"Error en la solicitud para el canal {cha}: {str(e)}")
+        # Paso 10: Crear el gráfico del sismograma
+        tr = st[0]
+        start_time = tr.stats.starttime.datetime
+        times = [start_time + datetime.timedelta(seconds=sec) for sec in tr.times()]
+        data = tr.data
 
-            # Procesar los datos MiniSEED
-            mini_seed_data = io.BytesIO(response.content)
-            try:
-                st = read(mini_seed_data)
-            except Exception as e:
-                raise Exception(f"Error procesando MiniSEED para el canal {cha}: {str(e)}")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(times, data, linewidth=0.8)
+        ax.set_title(f"Sismograma {cha} ({sta})\nRed Sísmica REDNE\n{start} - {end}")
+        ax.set_xlabel("Tiempo (UTC Colombia)")
+        ax.set_ylabel("Amplitud (M/s)")
+        fig.autofmt_xdate()
 
-            # Crear gráfico del sismograma
-            tr = st[0]
-            start_time = tr.stats.starttime.datetime
-            times = [start_time + datetime.timedelta(seconds=sec) for sec in tr.times()]
-            data = tr.data
+        # Paso 11: Agregar URL del canal en el gráfico
+        ax.text(0.02, 0.02, f"URL ({cha}): {url}", transform=ax.transAxes, fontsize=8, verticalalignment='bottom', bbox=dict(facecolor='white', edgecolor='black'))
 
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.plot(times, data, linewidth=0.8)
-            ax.set_title(f"Sismograma {cha} ({sta})\nRed Sísmica REDNE\n{start} - {end}")
-            ax.set_xlabel("Tiempo (UTC Colombia)")
-            ax.set_ylabel("Amplitud (M/s)")
-            fig.autofmt_xdate()
+        # Paso 12: Guardar el gráfico en memoria
+        output_image = io.BytesIO()
+        plt.savefig(output_image, format='png', dpi=100, bbox_inches="tight")
+        output_image.seek(0)
+        plt.close(fig)
 
-            # Agregar URL del canal en la esquina inferior izquierda
-            ax.text(0.02, 0.02, f"URL ({cha}): {url}", transform=ax.transAxes, fontsize=8, verticalalignment='bottom', bbox=dict(facecolor='white', edgecolor='black'))
-
-            # Guardar el gráfico en memoria
-            output_image = io.BytesIO()
-            plt.savefig(output_image, format='png', dpi=100, bbox_inches="tight")
-            output_image.seek(0)
-            plt.close(fig)
-
-            sismogram_images.append(output_image)
-
-        # Devolver las imágenes generadas
-        return sismogram_images
+        return output_image
 
     except Exception as e:
         # Registrar el error detalladamente para depuración
@@ -140,6 +137,7 @@ def generate_sismograma(net, sta, loc, cha, start, end):
 # Punto de entrada del servidor Flask
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
 
 
 
