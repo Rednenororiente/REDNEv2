@@ -132,6 +132,8 @@ def generate_sismograma_combinado(net, sta, loc, start, end):
             times = [start_time + datetime.timedelta(seconds=sec) for sec in tr.times()]
             data = tr.data
 
+            print(f"Generando gráfico para el canal {cha}")
+
             # Generar gráfico en el eje correspondiente de la figura
             axs[i].plot(times, data, linewidth=0.8)
             axs[i].set_title(f"Sismograma {cha} ({sta})\nRed Sísmica REDNE\n{start} - {end}")
