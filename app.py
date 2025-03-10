@@ -7,7 +7,7 @@ Original file is located at
     https://colab.research.google.com/drive/1rfIty2xr04StxKdItR0hVVAWnVhsUf7g
 """
 
-from flask import Flask, request, send_file, jsonify
+from flask import Flask, request, jsonify
 from obspy import read
 import requests
 import io
@@ -20,12 +20,6 @@ from flask_cors import CORS  # Habilitar CORS para todas las rutas
 app = Flask(__name__)
 CORS(app)  # Habilita CORS para todas las rutas
 
-# Función auxiliar para calcular la diferencia de tiempo
-def calculate_time_difference(start, end):
-    start_time = datetime.datetime.fromisoformat(start)
-    end_time = datetime.datetime.fromisoformat(end)
-    return (end_time - start_time).total_seconds() / 60  # Diferencia en minutos
-
 # Diccionario de canales asociados a cada estación
 station_channels = {
     'UIS01': ['HNE', 'HNN', 'HNZ'],
@@ -37,13 +31,6 @@ station_channels = {
 # Ruta para redirigir a /generate_graph desde /generate_sismograma
 @app.route('/generate_sismograma', methods=['GET'])
 def generate_sismograma_route():
-    # Redirige la solicitud a /generate_graph
-    return generate_graph()
-
-# Ruta para redirigir a /generate_graph desde /generate_helicorder
-@app.route('/generate_helicorder', methods=['GET'])
-def generate_helicorder_route():
-    # Redirige la solicitud a /generate_graph
     return generate_graph()
 
 # Ruta principal para manejar gráficos dinámicamente
@@ -69,7 +56,7 @@ def generate_graph():
         # Identificar los canales asociados a la estación
         selected_channels = station_channels[sta]
 
-        # Si el canal elegido es uno de los disponibles, obtener los otros canales
+        # Si el canal elegido no es válido, devolver error
         if cha not in selected_channels:
             return jsonify({"error": "Canal seleccionado no válido para esta estación"}), 400
 
@@ -78,12 +65,6 @@ def generate_graph():
         for channel in selected_channels:
             sismogram_image = generate_sismograma(net, sta, loc, channel, start, end)
             sismograms.append(sismogram_image)
-
-        # Si el intervalo es mayor a 30 minutos, generar helicorder
-        interval_minutes = calculate_time_difference(start, end)
-        if interval_minutes > 30:
-            helicorder_image = generate_helicorder(net, sta, loc, cha, start, end)
-            return jsonify({"sismograms": sismograms, "helicorder": helicorder_image})
 
         return jsonify({"sismograms": sismograms})
 
@@ -108,16 +89,21 @@ def generate_sismograma(net, sta, loc, cha, start, end):
             url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel={cha}&nodata=404"
             
             # Realizar la solicitud al servidor remoto
-            response = requests.get(url)
-            if response.status_code != 200:
-                return jsonify({"error": f"Error al descargar datos: {response.status_code}"}), 500
+            try:
+                response = requests.get(url, timeout=30)  # Timeout de 30 segundos para evitar bloqueos
+                if response.status_code != 200:
+                    raise Exception(f"Error al descargar datos del canal {cha}: {response.status_code}")
+            except requests.exceptions.Timeout:
+                raise Exception(f"Tiempo de espera agotado al intentar descargar los datos del canal {cha}")
+            except requests.exceptions.RequestException as e:
+                raise Exception(f"Error en la solicitud para el canal {cha}: {str(e)}")
 
             # Procesar los datos MiniSEED
             mini_seed_data = io.BytesIO(response.content)
             try:
                 st = read(mini_seed_data)
             except Exception as e:
-                return jsonify({"error": f"Error procesando MiniSEED: {str(e)}"}), 500
+                raise Exception(f"Error procesando MiniSEED para el canal {cha}: {str(e)}")
 
             # Crear gráfico del sismograma
             tr = st[0]
@@ -147,54 +133,14 @@ def generate_sismograma(net, sta, loc, cha, start, end):
         return sismogram_images
 
     except Exception as e:
+        # Registrar el error detalladamente para depuración
+        print(f"Error al generar el sismograma: {str(e)}")
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
-
-# Función para generar un helicorder
-def generate_helicorder(net, sta, loc, cha, start, end):
-    try:
-        # Construir la URL para descargar datos
-        url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel={cha}&nodata=404"
-        
-        # Realizar la solicitud al servidor remoto
-        response = requests.get(url)
-        if response.status_code != 200:
-            return jsonify({"error": f"Error al descargar datos: {response.status_code}"}), 500
-
-        # Procesar los datos MiniSEED
-        mini_seed_data = io.BytesIO(response.content)
-        try:
-            st = read(mini_seed_data)
-        except Exception as e:
-            return jsonify({"error": f"Error procesando MiniSEED: {str(e)}"}), 500
-
-        # Crear helicorder utilizando ObsPy
-        fig = st.plot(
-            type="dayplot",
-            interval=15,
-            right_vertical_labels=True,
-            vertical_scaling_range=2000,
-            color=['k', 'r', 'b'],
-            show_y_UTC_label=True,
-            one_tick_per_line=True
-        )
-
-        # Ajustar el tamaño del helicorder
-        fig.set_size_inches(12, 4)
-
-        # Guardar el gráfico en memoria
-        output_image = io.BytesIO()
-        fig.savefig(output_image, format='png', dpi=120, bbox_inches="tight")
-        output_image.seek(0)
-        plt.close(fig)
-
-        return output_image  # Retorna la imagen generada
-
-    except Exception as e:
-        return jsonify({"error": f"Error procesando helicorder: {str(e)}"}), 500
 
 # Punto de entrada del servidor Flask
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
 
 
 
