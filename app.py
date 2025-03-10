@@ -108,6 +108,7 @@ def generate_sismograma_conjuntamente(net, sta, loc, start, end):
             try:
                 response = requests.get(url, timeout=30)
                 if response.status_code != 200:
+                    print(f"Error al descargar datos para el canal {cha}: {response.status_code}")
                     raise Exception(f"Error al descargar datos del canal {cha}: {response.status_code}")
                 print(f"Datos descargados correctamente para el canal {cha}, tamaño de los datos: {len(response.content)} bytes")
             except requests.exceptions.RequestException as e:
@@ -152,8 +153,6 @@ def generate_sismograma_conjuntamente(net, sta, loc, start, end):
     except Exception as e:
         print(f"Error al generar el sismograma combinado: {str(e)}")
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
-
-
 
 # Punto de entrada del servidor Flask
 if __name__ == '__main__':
