@@ -39,7 +39,7 @@ def calculate_time_difference(start, end):
     return (end_time - start_time).total_seconds() / 60  # Diferencia en minutos
 
 # Función para generar el helicorder
-def generate_helicorder_logic(net, sta, loc, cha, start, end):
+def generate_helicorder(net, sta, loc, cha, start, end):
     try:
         print(f"Generando helicorder para: {sta}, Canal: {cha}, {start} - {end}")
 
@@ -47,19 +47,8 @@ def generate_helicorder_logic(net, sta, loc, cha, start, end):
         url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel={cha}&nodata=404"
         print(f"URL de solicitud para el helicorder: {url}")
         
-        # Calcular el intervalo de tiempo entre el inicio y el fin
-        interval_minutes = calculate_time_difference(start, end)
-        
-        # Ajustar el tiempo de espera en función del intervalo
-        if interval_minutes >= 420:  # Si el intervalo es mayor a 7 horas (420 minutos)
-            timeout = 60  # Tiempo de espera de 60 segundos para intervalos largos (7 horas)
-        else:
-            timeout = 10  # Tiempo de espera de 10 segundos para intervalos cortos (menores de 7 horas)
-
-        print(f"Tiempo de espera para la solicitud: {timeout} segundos")
-
-        # Realizar la solicitud HTTP con el timeout ajustado
-        response = requests.get(url, timeout=timeout)
+        # Realizar la solicitud HTTP para obtener los datos
+        response = requests.get(url, timeout=60)  # Aumentar el timeout para intervalos largos
         if response.status_code != 200:
             raise Exception(f"Error al descargar datos del helicorder: {response.status_code}")
         print(f"Datos descargados correctamente para el helicorder, tamaño de los datos: {len(response.content)} bytes")
