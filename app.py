@@ -43,12 +43,12 @@ def generate_helicorder(net, sta, loc, cha, start, end):
     try:
         print(f"Generando helicorder para: {sta}, Canal: {cha}, {start} - {end}")
 
-        # URL de la solicitud para obtener los datos del helicorder
+        # URL para la solicitud y obtener los datos del helicorder
         url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel={cha}&nodata=404"
         print(f"URL de solicitud para el helicorder: {url}")
         
-        # Realizar la solicitud HTTP para obtener los datos
-        response = requests.get(url, timeout=60)  # Aumentar el timeout para intervalos largos
+        # Realizar la solicitud HTTP GET para obtener los datos
+        response = requests.get(url, timeout=15)  # Aumentar el timeout para intervalos largos
         if response.status_code != 200:
             raise Exception(f"Error al descargar datos del helicorder: {response.status_code}")
         print(f"Datos descargados correctamente para el helicorder, tamaño de los datos: {len(response.content)} bytes")
