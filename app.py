@@ -149,7 +149,7 @@ def generate_sismograma_engrupo(net, sta, loc, start, end):
         print(f"Error al generar el sismograma combinado: {str(e)}")
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
 
-# Ruta de Flask para manejar solicitudes de sismogramas y helicorders
+# Ruta para manejar solicitudes de sismogramas y helicorders
 @app.route('/generate_sismograma', methods=['GET'])
 def generate_sismograma():
     try:
@@ -171,11 +171,29 @@ def generate_sismograma():
         
         # Calcular la diferencia de tiempo para decidir el tipo de gráfico
         interval_minutes = calculate_time_difference(start, end)
-        if interval_minutes <= 15:
+        if interval_minutes <= 10:
             return generate_sismograma_engrupo(net, sta, loc, start, end)
         else:
             return generate_helicorder_logic(net, sta, loc, cha, start, end)
     
+    except Exception as e:
+        return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
+
+# Ruta específica para generar helicorders
+@app.route('/generate_helicorder', methods=['GET'])
+def generate_helicorder_route():
+    try:
+        start = request.args.get('start')
+        end = request.args.get('end')
+        net = request.args.get('net')
+        sta = request.args.get('sta')
+        loc = request.args.get('loc')
+        cha = request.args.get('cha')
+        if not all([start, end, net, sta, loc, cha]):
+            return jsonify({"error": "Faltan parámetros requeridos"}), 400
+        if sta not in station_channels:
+            return jsonify({"error": "Estación no válida"}), 400
+        return generate_helicorder_logic(net, sta, loc, cha, start, end)
     except Exception as e:
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
 
