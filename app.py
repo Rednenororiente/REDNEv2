@@ -171,7 +171,7 @@ def generate_sismograma():
         
         # Calcular la diferencia de tiempo para decidir el tipo de gráfico
         interval_minutes = calculate_time_difference(start, end)
-        if interval_minutes <= 15:
+        if interval_minutes <= 10:
             return generate_sismograma_engrupo(net, sta, loc, start, end)
         else:
             return generate_helicorder(net, sta, loc, start, end)
