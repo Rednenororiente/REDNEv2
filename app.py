@@ -123,7 +123,8 @@ def generate_helicorder_logic(net, sta, loc, cha, start, end):
         print(f"Datos MiniSEED procesados correctamente para el helicorder")
         
         # Crear el helicorder utilizando ObsPy
-        fig = st.plot(
+        fig = plt.figure(figsize=(12, 4))  # Crear una figura de Matplotlib
+        st.plot(
             type="dayplot",
             interval=15,
             right_vertical_labels=True,
@@ -131,11 +132,8 @@ def generate_helicorder_logic(net, sta, loc, cha, start, end):
             color=['k', 'r', 'b'],
             show_y_UTC_label=True,
             one_tick_per_line=True,
-            handle=True  # Esto devuelve la figura en lugar de mostrarla
+            fig=fig  # Usar la figura creada
         )
-        
-        # Ajustar el tamaño del helicorder
-        fig.set_size_inches(12, 4)  # Configura el tamaño del gráfico (ancho x alto)
         
         # Guardar el gráfico del helicorder en memoria
         output_image = io.BytesIO()
@@ -151,7 +149,7 @@ def generate_helicorder_logic(net, sta, loc, cha, start, end):
         print(f"Error al generar el helicorder: {str(e)}")
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
 
-# Ruta de Flask para manejar solicitudes de sismogramas y helicorders
+# Ruta para generar sismogramas combinados
 @app.route('/generate_sismograma', methods=['GET'])
 def generate_sismograma():
     try:
@@ -177,6 +175,32 @@ def generate_sismograma():
             return generate_sismograma_engrupo(net, sta, loc, start, end)
         else:
             return generate_helicorder_logic(net, sta, loc, cha, start, end)
+    
+    except Exception as e:
+        return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
+
+# Ruta específica para generar helicorders
+@app.route('/generate_helicorder', methods=['GET'])
+def generate_helicorder_route():
+    try:
+        # Obtener parámetros de la solicitud
+        start = request.args.get('start')
+        end = request.args.get('end')
+        net = request.args.get('net')
+        sta = request.args.get('sta')
+        loc = request.args.get('loc')
+        cha = request.args.get('cha')
+        
+        # Verificar que todos los parámetros estén presentes
+        if not all([start, end, net, sta, loc, cha]):
+            return jsonify({"error": "Faltan parámetros requeridos"}), 400
+        
+        # Verificar si la estación es válida
+        if sta not in station_channels:
+            return jsonify({"error": "Estación no válida"}), 400
+        
+        # Generar el helicorder
+        return generate_helicorder_logic(net, sta, loc, cha, start, end)
     
     except Exception as e:
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
