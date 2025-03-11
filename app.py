@@ -38,6 +38,65 @@ def calculate_time_difference(start, end):
     end_time = datetime.datetime.fromisoformat(end)
     return (end_time - start_time).total_seconds() / 60  # Diferencia en minutos
 
+# Función para generar el helicorder
+def generate_helicorder_logic(net, sta, loc, cha, start, end):
+    try:
+        print(f"Generando helicorder para: {sta}, Canal: {cha}, {start} - {end}")
+
+        # URL de la solicitud para obtener los datos del helicorder
+        url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel={cha}&nodata=404"
+        print(f"URL de solicitud para el helicorder: {url}")
+        
+        # Calcular el intervalo de tiempo entre el inicio y el fin
+        interval_minutes = calculate_time_difference(start, end)
+        
+        # Ajustar el tiempo de espera en función del intervalo
+        if interval_minutes >= 420:  # Si el intervalo es mayor a 7 horas (420 minutos)
+            timeout = 60  # Tiempo de espera de 60 segundos para intervalos largos (7 horas)
+        else:
+            timeout = 10  # Tiempo de espera de 10 segundos para intervalos cortos (menores de 7 horas)
+
+        print(f"Tiempo de espera para la solicitud: {timeout} segundos")
+
+        # Realizar la solicitud HTTP con el timeout ajustado
+        response = requests.get(url, timeout=timeout)
+        if response.status_code != 200:
+            raise Exception(f"Error al descargar datos del helicorder: {response.status_code}")
+        print(f"Datos descargados correctamente para el helicorder, tamaño de los datos: {len(response.content)} bytes")
+        
+        # Procesar los datos MiniSEED para el helicorder
+        mini_seed_data = io.BytesIO(response.content)
+        st = read(mini_seed_data)
+        print(f"Datos MiniSEED procesados correctamente para el helicorder")
+        
+        # Crear el helicorder utilizando ObsPy
+        fig = st.plot(
+            type="dayplot",
+            interval=15,
+            right_vertical_labels=True,
+            vertical_scaling_range=2000,
+            color=['k', 'r', 'b'],
+            show_y_UTC_label=True,
+            one_tick_per_line=True
+        )
+        
+        # Ajustar el tamaño del helicorder
+        fig.set_size_inches(12, 4)  # Configura el tamaño del gráfico (ancho x alto)
+        
+        # Guardar el gráfico del helicorder en memoria
+        output_image = io.BytesIO()
+        fig.savefig(output_image, format='png', dpi=120, bbox_inches="tight")
+        output_image.seek(0)
+        plt.close(fig)
+
+        print(f"Helicorder generado para la estación {sta}")
+        
+        return send_file(output_image, mimetype='image/png')
+    
+    except Exception as e:
+        print(f"Error al generar el helicorder: {str(e)}")
+        return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
+
 # Función auxiliar para generar el sismograma combinado
 def generate_sismograma_engrupo(net, sta, loc, start, end):
     try:
@@ -101,54 +160,6 @@ def generate_sismograma_engrupo(net, sta, loc, start, end):
         print(f"Error al generar el sismograma combinado: {str(e)}")
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
 
-# Función para generar el helicorder
-def generate_helicorder(net, sta, loc, start, end):
-    try:
-        print(f"Generando helicorder para: {sta}, {start} - {end}")
-
-        # URL de la solicitud para obtener los datos del helicorder
-        url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel=EHZ&nodata=404"
-        print(f"URL de solicitud para el helicorder: {url}")
-        
-        # Realizar la solicitud HTTP para obtener los datos
-        response = requests.get(url, timeout=10)
-        if response.status_code != 200:
-            raise Exception(f"Error al descargar datos del helicorder: {response.status_code}")
-        print(f"Datos descargados correctamente para el helicorder, tamaño de los datos: {len(response.content)} bytes")
-        
-        # Procesar los datos MiniSEED para el helicorder
-        mini_seed_data = io.BytesIO(response.content)
-        st = read(mini_seed_data)
-        print(f"Datos MiniSEED procesados correctamente para el helicorder")
-        
-        # Crear el helicorder utilizando ObsPy
-        fig = st.plot(
-            type="dayplot",
-            interval=15,
-            right_vertical_labels=True,
-            vertical_scaling_range=2000,
-            color=['k', 'r', 'b'],
-            show_y_UTC_label=True,
-            one_tick_per_line=True
-        )
-        
-        # Ajustar el tamaño del helicorder
-        fig.set_size_inches(12, 4)  # Configura el tamaño del gráfico (ancho x alto)
-        
-        # Guardar el gráfico del helicorder en memoria
-        output_image = io.BytesIO()
-        fig.savefig(output_image, format='png', dpi=120, bbox_inches="tight")
-        output_image.seek(0)
-        plt.close(fig)
-
-        print(f"Helicorder generado para la estación {sta}")
-        
-        return send_file(output_image, mimetype='image/png')
-    
-    except Exception as e:
-        print(f"Error al generar el helicorder: {str(e)}")
-        return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
-
 # Ruta de Flask para manejar solicitudes de sismogramas y helicorders
 @app.route('/generate_sismograma', methods=['GET'])
 def generate_sismograma():
@@ -171,10 +182,10 @@ def generate_sismograma():
         
         # Calcular la diferencia de tiempo para decidir el tipo de gráfico
         interval_minutes = calculate_time_difference(start, end)
-        if interval_minutes <= 10:
+        if interval_minutes <= 15:
             return generate_sismograma_engrupo(net, sta, loc, start, end)
         else:
-            return generate_helicorder(net, sta, loc, start, end)
+            return generate_helicorder_logic(net, sta, loc, cha, start, end)
     
     except Exception as e:
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
@@ -182,6 +193,7 @@ def generate_sismograma():
 # Punto de entrada del servidor Flask
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
 
 
 
