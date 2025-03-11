@@ -20,138 +20,15 @@ from flask_cors import CORS  # Habilitar CORS para todas las rutas
 app = Flask(__name__)
 CORS(app)  # Habilitar CORS para todas las rutas
 
-# Directorio de Estaciones de REDNE y sus canales
-station_channels = {
-    'UIS01': ['HNE', 'HNN', 'HNZ'],
-    'UIS03': ['HNE', 'HNN', 'HNZ'],
-    'UIS04': ['HNE', 'HNN', 'HNZ'], 
-    'UIS05': ['EHZ', 'ENE', 'ENN', 'ENZ'], 
-    'UIS06': ['EHE', 'EHN', 'EHZ'],
-    'UIS09': ['EHE', 'EHN', 'EHZ'], 
-    'UIS10': ['EHE', 'EHN', 'EHZ'],
-    'UIS11': ['EHE', 'EHN', 'EHZ'], 
-}
-
 # Función auxiliar para calcular la diferencia de tiempo
 def calculate_time_difference(start, end):
     start_time = datetime.datetime.fromisoformat(start)
     end_time = datetime.datetime.fromisoformat(end)
     return (end_time - start_time).total_seconds() / 60  # Diferencia en minutos
 
-# Función para generar el helicorder
-def generate_helicorder(net, sta, loc, cha, start, end):
-    try:
-        print(f"Generando helicorder para: {sta}, Canal: {cha}, {start} - {end}")
-
-        # URL para la solicitud y obtener los datos del helicorder
-        url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel={cha}&nodata=404"
-        print(f"URL de solicitud para el helicorder: {url}")
-        
-        # Realizar la solicitud HTTP GET para obtener los datos
-        response = requests.get(url, timeout=15)  # Aumentar el timeout para intervalos largos
-        if response.status_code != 200:
-            raise Exception(f"Error al descargar datos del helicorder: {response.status_code}")
-        print(f"Datos descargados correctamente para el helicorder, tamaño de los datos: {len(response.content)} bytes")
-        
-        # Procesar los datos MiniSEED para el helicorder
-        mini_seed_data = io.BytesIO(response.content)
-        st = read(mini_seed_data)
-        print(f"Datos MiniSEED procesados correctamente para el helicorder")
-        
-        # Crear el helicorder utilizando ObsPy
-        fig = st.plot(
-            type="dayplot",
-            interval=15,
-            right_vertical_labels=True,
-            vertical_scaling_range=2000,
-            color=['k', 'r', 'b'],
-            show_y_UTC_label=True,
-            one_tick_per_line=True
-        )
-        
-        # Ajustar el tamaño del helicorder
-        fig.set_size_inches(12, 4)  # Configura el tamaño del gráfico (ancho x alto)
-        
-        # Guardar el gráfico del helicorder en memoria
-        output_image = io.BytesIO()
-        fig.savefig(output_image, format='png', dpi=120, bbox_inches="tight")
-        output_image.seek(0)
-        plt.close(fig)
-
-        print(f"Helicorder generado para la estación {sta}")
-        
-        return send_file(output_image, mimetype='image/png')
-    
-    except Exception as e:
-        print(f"Error al generar el helicorder: {str(e)}")
-        return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
-
-# Función auxiliar para generar el sismograma combinado
-def generate_sismograma_engrupo(net, sta, loc, start, end):
-    try:
-        print(f"Generando sismograma combinado para: {sta}, {start} - {end}")
-        # Obtener los canales asociados a la estación
-        selected_channels = station_channels.get(sta, [])
-        if not selected_channels:
-            return jsonify({"error": "No se encontraron canales para la estación seleccionada"}), 400
-        
-        # Crear una figura para el gráfico conjunto
-        fig, axs = plt.subplots(len(selected_channels), 1, figsize=(10, 6 * len(selected_channels)))
-        if len(selected_channels) == 1:
-            axs = [axs]  # Asegurar que axs sea iterable incluso si solo hay un canal
-        
-        # Iterar sobre los canales y generar el gráfico para cada uno
-        for i, cha in enumerate(selected_channels):
-            print(f"Generando gráfico para el canal: {cha}")
-            url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel={cha}&nodata=404"
-            print(f"URL de solicitud para el canal {cha}: {url}")
-            
-            # Realizar la solicitud HTTP para obtener los datos
-            response = requests.get(url, timeout=10)
-            if response.status_code != 200:
-                raise Exception(f"Error al descargar datos del canal {cha}: {response.status_code}")
-            print(f"Datos descargados correctamente para el canal {cha}, tamaño de los datos: {len(response.content)} bytes")
-            
-            # Procesar los datos MiniSEED
-            mini_seed_data = io.BytesIO(response.content)
-            st = read(mini_seed_data)
-            print(f"Datos MiniSEED procesados correctamente para el canal {cha}")
-            
-            # Crear el gráfico del sismograma para cada canal
-            tr = st[0]
-            start_time = tr.stats.starttime.datetime
-            times = [start_time + datetime.timedelta(seconds=sec) for sec in tr.times()]
-            data = tr.data
-            
-            # Generar gráfico en el eje correspondiente de la figura
-            axs[i].plot(times, data, linewidth=0.8)
-            axs[i].set_title(f"Universidad Industrial de Santander UIS \n Red Sísmica REDNE \n Sismograma {cha} ({sta}) \n {start} - {end}")
-            axs[i].set_xlabel("Tiempo (UTC Colombia)")
-            axs[i].set_ylabel("Amplitud (M/s)")
-            axs[i].grid(True)
-            axs[i].tick_params(axis='x', rotation=45)
-        
-        # Ajustar el espacio entre los subgráficos
-        fig.tight_layout(pad=2.0)
-        
-        # Guardar el gráfico combinado en memoria
-        output_image = io.BytesIO()
-        plt.savefig(output_image, format='png', dpi=100, bbox_inches="tight")
-        output_image.seek(0)
-        plt.close(fig)
-        
-        print(f"Sismograma combinado generado para la estación {sta}")
-        
-        # Devolver la imagen generada
-        return send_file(output_image, mimetype='image/png')
-    
-    except Exception as e:
-        print(f"Error al generar el sismograma combinado: {str(e)}")
-        return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
-
-# Ruta para manejar solicitudes de sismogramas y helicorders
-@app.route('/generate_sismograma', methods=['GET'])
-def generate_sismograma():
+# Ruta principal para manejar gráficos dinámicamente
+@app.route('/generate_graph', methods=['GET'])
+def generate_graph():
     try:
         # Obtener parámetros de la solicitud
         start = request.args.get('start')
@@ -160,41 +37,154 @@ def generate_sismograma():
         sta = request.args.get('sta')
         loc = request.args.get('loc')
         cha = request.args.get('cha')
-        
+
         # Verificar que todos los parámetros estén presentes
         if not all([start, end, net, sta, loc, cha]):
             return jsonify({"error": "Faltan parámetros requeridos"}), 400
-        
-        # Verificar si la estación es válida
-        if sta not in station_channels:
-            return jsonify({"error": "Estación no válida"}), 400
-        
+
         # Calcular la diferencia de tiempo para decidir el tipo de gráfico
         interval_minutes = calculate_time_difference(start, end)
-        if interval_minutes <= 10:
-            return generate_sismograma_engrupo(net, sta, loc, start, end)
+        if interval_minutes <= 30:
+            return generate_sismograma(net, sta, loc, cha, start, end)
         else:
-            return generate_helicorder_logic(net, sta, loc, cha, start, end)
-    
+            return generate_helicorder(net, sta, loc, cha, start, end)
+
     except Exception as e:
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
 
-# Ruta específica para generar helicorders
-@app.route('/generate_helicorder', methods=['GET'])
-def generate_helicorder_route():
+# Ruta para generar específicamente sismogramas
+@app.route('/generate_sismograma', methods=['GET'])
+def generate_sismograma_route():
     try:
+        # Extraer parámetros de la solicitud
         start = request.args.get('start')
         end = request.args.get('end')
         net = request.args.get('net')
         sta = request.args.get('sta')
         loc = request.args.get('loc')
         cha = request.args.get('cha')
+
+        # Validar los parámetros
         if not all([start, end, net, sta, loc, cha]):
             return jsonify({"error": "Faltan parámetros requeridos"}), 400
-        if sta not in station_channels:
-            return jsonify({"error": "Estación no válida"}), 400
-        return generate_helicorder_logic(net, sta, loc, cha, start, end)
+
+        # Llamar a la función de generación de sismogramas
+        return generate_sismograma(net, sta, loc, cha, start, end)
+
     except Exception as e:
+        return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
+
+# Ruta para generar específicamente helicorders
+@app.route('/generate_helicorder', methods=['GET'])
+def generate_helicorder_route():
+    try:
+        # Extraer parámetros de la solicitud
+        start = request.args.get('start')
+        end = request.args.get('end')
+        net = request.args.get('net')
+        sta = request.args.get('sta')
+        loc = request.args.get('loc')
+        cha = request.args.get('cha')
+
+        # Validar los parámetros
+        if not all([start, end, net, sta, loc, cha]):
+            return jsonify({"error": "Faltan parámetros requeridos"}), 400
+
+        # Llamar a la función de generación de helicorders
+        return generate_helicorder(net, sta, loc, cha, start, end)
+
+    except Exception as e:
+        return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
+
+# Función para generar un sismograma
+def generate_sismograma(net, sta, loc, cha, start, end):
+    try:
+        # Construir la URL para descargar datos
+        url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel={cha}&nodata=404"
+        
+        # Realizar la solicitud al servidor remoto
+        response = requests.get(url)
+        if response.status_code != 200:
+            return jsonify({"error": f"Error al descargar datos: {response.status_code}"}), 500
+
+        # Procesar los datos MiniSEED
+        mini_seed_data = io.BytesIO(response.content)
+        try:
+            st = read(mini_seed_data)
+        except Exception as e:
+            return jsonify({"error": f"Error procesando MiniSEED: {str(e)}"}), 500
+
+        # Crear gráfico del sismograma
+        tr = st[0]
+        start_time = tr.stats.starttime.datetime
+        times = [start_time + datetime.timedelta(seconds=sec) for sec in tr.times()]
+        data = tr.data
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(times, data, color='black', linewidth=0.8)
+        ax.set_title(f"Universidad Industrial de Santander UIS\nRed Sísmica REDNE\n{start} - {end}")
+        ax.set_xlabel("Tiempo (UTC Colombia)")
+        ax.set_ylabel("Amplitud (M/s)")
+        fig.autofmt_xdate()
+
+        # Agregar información de la estación en la esquina superior izquierda
+        station_info = f"{net}.{sta}.{loc}.{cha}"
+        ax.text(0.02, 0.98, station_info, transform=ax.transAxes, fontsize=10, verticalalignment='top', bbox=dict(facecolor='white', edgecolor='black'))
+
+        # Guardar el gráfico en memoria
+        output_image = io.BytesIO()
+        plt.savefig(output_image, format='png', dpi=100, bbox_inches="tight")
+        output_image.seek(0)
+        plt.close(fig)
+
+        return send_file(output_image, mimetype='image/png')
+
+    except Exception as e:
+        return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
+
+# Función para generar un helicorder
+def generate_helicorder(net, sta, loc, cha, start, end):
+    try:
+        # Construir la URL para descargar datos
+        url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel={cha}&nodata=404"
+        
+        # Realizar la solicitud al servidor remoto
+        response = requests.get(url)
+        if response.status_code != 200:
+            return jsonify({"error": f"Error al descargar datos: {response.status_code}"}), 500
+
+        # Procesar los datos MiniSEED
+        mini_seed_data = io.BytesIO(response.content)
+        try:
+            st = read(mini_seed_data)
+        except Exception as e:
+            return jsonify({"error": f"Error procesando MiniSEED: {str(e)}"}), 500
+
+        # Crear helicorder utilizando ObsPy
+        fig = st.plot(
+            type="dayplot",
+            interval=15,
+            right_vertical_labels=True,
+            vertical_scaling_range=2000,
+            color=['k', 'r', 'b'],
+            show_y_UTC_label=True,
+            one_tick_per_line=True,
+            handle=True  # Esto devuelve la figura en lugar de mostrarla
+        )
+
+        # Ajustar el tamaño del helicorder
+        fig.set_size_inches(12, 4)  # Configura el tamaño del gráfico (ancho x alto)
+
+        # Guardar el gráfico en memoria
+        output_image = io.BytesIO()
+        fig.savefig(output_image, format='png', dpi=120, bbox_inches="tight")
+        output_image.seek(0)
+        plt.close(fig)
+
+        return send_file(output_image, mimetype='image/png')
+
+    except Exception as e:
+        print(f"Error en generate_helicorder: {str(e)}")
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
 
 # Punto de entrada del servidor Flask
