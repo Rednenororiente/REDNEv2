@@ -5,6 +5,8 @@ requests
 matplotlib
 gunicorn
 numpy
+gevent>=1.4
+
 
 
 
