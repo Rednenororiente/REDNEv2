@@ -60,7 +60,7 @@ def generate_sismograma_engrupo(net, sta, loc, start, end):
             print(f"URL de solicitud para el canal {cha}: {url}")
             
             # Realizar la solicitud HTTP para obtener los datos
-            response = requests.get(url, timeout=10)
+            response = requests.get(url, timeout=120)
             if response.status_code != 200:
                 raise Exception(f"Error al descargar datos del canal {cha}: {response.status_code}")
             print(f"Datos descargados correctamente para el canal {cha}, tamaño de los datos: {len(response.content)} bytes")
@@ -112,7 +112,7 @@ def generate_helicorder_logic(net, sta, loc, cha, start, end):
         print(f"URL de solicitud para el helicorder: {url}")
         
         # Realizar la solicitud HTTP para obtener los datos
-        response = requests.get(url, timeout=60)  # Aumentar el timeout para intervalos largos
+        response = requests.get(url, timeout=120)  # Aumentar el timeout para intervalos largos
         if response.status_code != 200:
             raise Exception(f"Error al descargar datos del helicorder: {response.status_code}")
         print(f"Datos descargados correctamente para el helicorder, tamaño de los datos: {len(response.content)} bytes")
