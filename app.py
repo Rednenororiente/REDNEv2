@@ -7,6 +7,8 @@ Original file is located at
     https://colab.research.google.com/drive/1rfIty2xr04StxKdItR0hVVAWnVhsUf7g
 """
 
+import gevent.monkey
+gevent.monkey.patch_all()  # Asegúrate de llamar esto primero
 import time
 import requests
 from flask import Flask, request, send_file, jsonify
