@@ -21,6 +21,12 @@ import time
 app = Flask(__name__)
 CORS(app)  # Habilitar CORS para todas las rutas
 
+## se plasma por problemas con Render y OSSO
+# Ruta para página de inicio
+@app.route('/', methods=['GET'])
+def home():
+    return "Bienvenido al servicio de sismogramas REDNE", 200
+
 # Directorio de Estaciones de REDNE y sus canales
 station_channels = {
     'UIS01': ['HNE', 'HNN', 'HNZ'],
