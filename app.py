@@ -7,18 +7,16 @@ Original file is located at
     https://colab.research.google.com/drive/1rfIty2xr04StxKdItR0hVVAWnVhsUf7g
 """
 
-import gevent.monkey
-gevent.monkey.patch_all()  # Asegúrate de llamar esto primero
-import time
-import requests
 from flask import Flask, request, send_file, jsonify
 from obspy import read
+import requests
 import io
 import datetime
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')  # Para evitar problemas de GUI en entornos sin pantalla
 from flask_cors import CORS  # Habilitar CORS para todas las rutas
+import time
 
 app = Flask(__name__)
 CORS(app)  # Habilitar CORS para todas las rutas
@@ -41,22 +39,6 @@ def calculate_time_difference(start, end):
     end_time = datetime.datetime.fromisoformat(end)
     return (end_time - start_time).total_seconds() / 60  # Diferencia en minutos
 
-# Función con reintentos para obtener los datos de OSSO
-def get_data_from_osso(url, retries=3, timeout=400):
-    for attempt in range(retries):
-        try:
-            response = requests.get(url, timeout=timeout)
-            response.raise_for_status()  # Verifica si la respuesta fue exitosa (código 200)
-            return response  # Si la solicitud fue exitosa, devuelve la respuesta
-        except requests.exceptions.Timeout:
-            print(f"Intento {attempt + 1}: Timeout alcanzado. Reintentando...")
-            if attempt == retries - 1:
-                print("Número máximo de reintentos alcanzado.")
-        except requests.exceptions.RequestException as e:
-            print(f"Error en la solicitud: {e}")
-        time.sleep(2)  # Espera de 2 segundos antes de intentar nuevamente
-    return None
-
 # Función para generar el sismograma combinado
 def generate_sismograma_engrupo(net, sta, loc, start, end):
     try:
@@ -78,11 +60,10 @@ def generate_sismograma_engrupo(net, sta, loc, start, end):
             url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel={cha}&nodata=404"
             print(f"URL de solicitud para el canal {cha}: {url}")
             
-            # Realizar la solicitud HTTP para obtener los datos con reintentos
-            response = get_data_from_osso(url)
-            if response is None:
-                raise Exception(f"Error al descargar datos del canal {cha}: No se pudo obtener respuesta")
-            
+            # Realizar la solicitud HTTP para obtener los datos
+            response = requests.get(url, timeout=400)
+            if response.status_code != 200:
+                raise Exception(f"Error al descargar datos del canal {cha}: {response.status_code}")
             print(f"Datos descargados correctamente para el canal {cha}, tamaño de los datos: {len(response.content)} bytes")
             
             # Procesar los datos MiniSEED
@@ -131,10 +112,10 @@ def generate_helicorder_logic(net, sta, loc, cha, start, end):
         url = f"http://osso.univalle.edu.co/fdsnws/dataselect/1/query?starttime={start}&endtime={end}&network={net}&station={sta}&location={loc}&channel={cha}&nodata=404"
         print(f"URL de solicitud para el helicorder: {url}")
         
-        # Realizar la solicitud HTTP para obtener los datos con reintentos
-        response = get_data_from_osso(url)
-        if response is None:
-            raise Exception(f"Error al descargar datos del helicorder: No se pudo obtener respuesta")
+        # Realizar la solicitud HTTP para obtener los datos
+        response = requests.get(url, timeout=400)  # Aumentar el timeout para intervalos largos
+        if response.status_code != 200:
+            raise Exception(f"Error al descargar datos del helicorder: {response.status_code}")
         print(f"Datos descargados correctamente para el helicorder, tamaño de los datos: {len(response.content)} bytes")
         
         # Procesar los datos MiniSEED para el helicorder
@@ -228,6 +209,7 @@ def generate_helicorder_route():
 # Punto de entrada del servidor Flask
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
 
 
 
