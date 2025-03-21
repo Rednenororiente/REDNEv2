@@ -56,7 +56,7 @@ def generate_sismograma_engrupo(net, sta, loc, start, end):
             return jsonify({"error": "No se encontraron canales para la estación seleccionada"}), 400
         
         # Crear una figura para el gráfico conjunto
-        fig, axs = plt.subplots(len(selected_channels), 1, figsize=(10, 5 * len(selected_channels)))
+        fig, axs = plt.subplots(len(selected_channels), 1, figsize=(11, 6 * len(selected_channels)))
         if len(selected_channels) == 1:
             axs = [axs]  # Asegurar que axs sea iterable incluso si solo hay un canal
         
@@ -130,7 +130,7 @@ def generate_helicorder_logic(net, sta, loc, cha, start, end):
         print(f"Datos MiniSEED procesados correctamente para el helicorder")
         
         # Crear el helicorder utilizando ObsPy
-        fig = plt.figure(figsize=(10, 6)) 
+        fig = plt.figure(figsize=(13, 5)) 
         # Crear una figura de Matplotlib
         st.plot(
             type="dayplot",
