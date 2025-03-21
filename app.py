@@ -56,7 +56,7 @@ def generate_sismograma_engrupo(net, sta, loc, start, end):
             return jsonify({"error": "No se encontraron canales para la estación seleccionada"}), 400
         
         # Crear una figura para el gráfico conjunto
-        fig, axs = plt.subplots(len(selected_channels), 1, figsize=(10, 8 * len(selected_channels)))
+        fig, axs = plt.subplots(len(selected_channels), 1, figsize=(10, 6 * len(selected_channels)))
         if len(selected_channels) == 1:
             axs = [axs]  # Asegurar que axs sea iterable incluso si solo hay un canal
         
@@ -92,7 +92,7 @@ def generate_sismograma_engrupo(net, sta, loc, start, end):
             axs[i].tick_params(axis='x', rotation=45)
         
         # Ajustar el espacio entre los subgráficos
-        fig.tight_layout(pad=2.0)
+        fig.tight_layout(pad=2.2)
         
         # Guardar el gráfico combinado en memoria
         output_image = io.BytesIO()
